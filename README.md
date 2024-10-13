@@ -5,9 +5,9 @@ This project enables control of a **relay module** connected to an **ESP32** usi
 ## Project Structure
 
 This repository contains the following key files:
-- **`esp32_relay_control.ino`**: Arduino code to run on the ESP32.
-- **`main.dart`**: Flutter code for the app's UI and BLE logic.
-- **`pubspec.yaml`**: Configuration file listing dependencies for the Flutter project.
+- **`esp32/esp32_relay_control.ino`**: Arduino code to run on the ESP32.
+- **`flutter_app/main.dart`**: Flutter code for the app's UI and BLE logic.
+- **`flutter_app/pubspec.yaml`**: Configuration file listing dependencies for the Flutter project.
 
 **Note:**  
 You need to **create a new Flutter project** and replace the default files with the provided code.
