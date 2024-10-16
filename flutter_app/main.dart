@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:async';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Ask for location permission (needed for BLE scan)
   await Permission.location.request();
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  // Add a named `Key` parameter in the constructor
   const MyApp({super.key});
 
   @override
@@ -26,7 +25,6 @@ class MyApp extends StatelessWidget {
 }
 
 class MyHomePage extends StatefulWidget {
-  // Add a named `Key` parameter in the constructor
   const MyHomePage({super.key});
 
   @override
@@ -38,9 +36,10 @@ class MyHomePageState extends State<MyHomePage> {
   BluetoothDevice? connectedDevice;
   BluetoothCharacteristic? controlCharacteristic;
 
-  bool _isPressed = false; // Track button press state
+  bool _isPressed = false;
+  TimeOfDay? _alarmTime;
+  Timer? _alarmTimer;
 
-  // UUIDs should match the ones on your ESP32
   final String serviceUUID = "12345678-1234-5678-1234-56789abcdef0";
   final String characteristicUUID = "abcd1234-5678-1234-5678-12345678abcd";
 
@@ -48,6 +47,12 @@ class MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     scanForDevices();
+  }
+
+  @override
+  void dispose() {
+    _alarmTimer?.cancel();
+    super.dispose();
   }
 
   void scanForDevices() {
@@ -93,6 +98,45 @@ class MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  void _setAlarm() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _alarmTime = picked;
+      });
+      _scheduleAlarm();
+    }
+  }
+
+  void _scheduleAlarm() {
+    _alarmTimer?.cancel();
+    if (_alarmTime != null) {
+      final now = DateTime.now();
+      var scheduledTime = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        _alarmTime!.hour,
+        _alarmTime!.minute,
+      );
+      if (scheduledTime.isBefore(now)) {
+        scheduledTime = scheduledTime.add(const Duration(days: 1));
+      }
+      final duration = scheduledTime.difference(now);
+      _alarmTimer = Timer(duration, _triggerAlarm);
+    }
+  }
+
+  void _triggerAlarm() {
+    writeData("ON");
+    Future.delayed(const Duration(seconds: 5), () {
+      writeData("OFF");
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -100,55 +144,65 @@ class MyHomePageState extends State<MyHomePage> {
         title: const Text('ESP32 Relay Control'),
       ),
       body: Center(
-        child: GestureDetector(
-          onTap: () {
-            setState(() {
-              _isPressed = true; // Immediately update UI
-            });
-            // Toggle the relay with tap (momentary action)
-            writeData("ON");
-            Future.delayed(const Duration(milliseconds: 100), () {
-              writeData("OFF");
-              setState(() {
-                _isPressed = false; // Update UI after relay action is completed
-              });
-            });
-          },
-          onLongPressStart: (_) {
-            setState(() {
-              _isPressed = true; // Immediately update UI
-            });
-            // Hold the relay ON while holding the button
-            writeData("ON");
-          },
-          onLongPressEnd: (_) {
-            writeData("OFF");
-            setState(() {
-              _isPressed = false; // Update UI immediately after release
-            });
-          },
-          child: Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _isPressed
-                  ? Colors.green
-                  : Colors.white, // Change color based on press state
-              border: Border.all(
-                  color: Colors.green, width: 2), // Green border for visibility
-            ),
-            child: const Center(
-              child: Text(
-                "Press",
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isPressed = true;
+                });
+                writeData("ON");
+                Future.delayed(const Duration(milliseconds: 100), () {
+                  writeData("OFF");
+                  setState(() {
+                    _isPressed = false;
+                  });
+                });
+              },
+              onLongPressStart: (_) {
+                setState(() {
+                  _isPressed = true;
+                });
+                writeData("ON");
+              },
+              onLongPressEnd: (_) {
+                writeData("OFF");
+                setState(() {
+                  _isPressed = false;
+                });
+              },
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _isPressed ? Colors.green : Colors.white,
+                  border: Border.all(color: Colors.green, width: 2),
+                ),
+                child: const Center(
+                  child: Text(
+                    "Press",
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _setAlarm,
+              child: const Text('Set Alarm'),
+            ),
+            if (_alarmTime != null)
+              Text(
+                'Alarm set for: ${_alarmTime!.format(context)}',
+                style: const TextStyle(fontSize: 16),
+              ),
+          ],
         ),
       ),
     );
